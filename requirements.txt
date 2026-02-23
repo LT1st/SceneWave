@@ -10,6 +10,17 @@ gradio>=4.0.0
 # Desktop App (Windows)
 customtkinter>=5.2.0
 
+# Desktop App (macOS)
+PySide6>=6.6.0
+
+# API Service
+fastapi>=0.109.0
+uvicorn>=0.27.0
+python-multipart>=0.0.6
+
+# Flutter (移动端开发依赖，需单独安装 Flutter SDK)
+# see: https://flutter.dev/docs/get-started/install
+
 # CLI
 rich>=13.0.0
 typer>=0.9.0

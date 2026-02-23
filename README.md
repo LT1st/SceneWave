@@ -95,31 +95,41 @@
 SceneWeave/
 ├── README.md                 # 本文件
 ├── requirements.txt          # Python 依赖
-├── src/
-│   ├── __init__.py
+├── src/                      # 核心算法 (共享)
 │   ├── core/
-│   │   ├── __init__.py
 │   │   ├── detector.py       # YOLO 主体检测
 │   │   ├── scorer.py         # 构图评分引擎
-│   │   ├── reframer.py       # 重构图引擎
-│   │   └── outpainter.py     # AI 扩图引擎
-│   ├── utils/
-│   │   ├── __init__.py
-│   │   ├── image_utils.py    # 图像处理工具
-│   │   └── aspect_ratio.py   # 比例转换工具
-│   └── presets/
-│       ├── __init__.py
-│       └── social_media.py   # 社交媒体预设
+│   │   └── reframer.py       # 重构图引擎
+│   └── utils/
+│       └── image_utils.py    # 图像处理工具
+│
+├── desktop/                  # 桌面应用
+│   ├── windows/
+│   │   └── main.py           # Windows (CustomTkinter)
+│   └── macos/
+│       └── main.py           # macOS (PySide6)
+│
+├── mobile/                   # 移动应用 (Flutter)
+│   ├── lib/                  # Dart 源码
+│   │   ├── screens/          # 页面
+│   │   ├── widgets/          # 组件
+│   │   └── services/         # 服务
+│   ├── android/              # Android 配置
+│   ├── ios/                  # iOS 配置
+│   └── macos/                # macOS 配置
+│
+├── api/                      # API 服务
+│   ├── main.py               # FastAPI 服务
+│   └── start.sh              # 启动脚本
+│
 ├── web/
 │   └── app.py                # Gradio Web UI
+│
 ├── cli/
 │   └── main.py               # 命令行工具
-├── tests/
-│   └── test_core.py          # 单元测试
-├── examples/
-│   └── sample_images/        # 示例图片
-└── docs/
-    └── API.md                # API 文档
+│
+├── start.bat                 # Windows 启动脚本
+└── start-macos.sh            # macOS 启动脚本
 ```
 
 ---
@@ -171,7 +181,48 @@ python web/app.py
 
 **方式二：命令行启动**
 ```bash
-python app/main.py
+python desktop/windows/main.py
+```
+
+### 桌面应用 (macOS)
+
+```bash
+# 命令行启动
+python desktop/macos/main.py
+
+# 或使用启动脚本
+./start-macos.sh
+```
+
+### 移动应用 (Flutter)
+
+```bash
+cd mobile
+
+# 安装依赖
+flutter pub get
+
+# 运行 (iOS/Android/macOS)
+flutter run
+
+# 构建 iOS
+flutter build ios
+
+# 构建 Android
+flutter build apk
+```
+
+### API 服务
+
+```bash
+# 启动 API 服务
+python api/main.py
+
+# 或使用启动脚本
+./api/start.sh
+
+# 访问文档
+# http://localhost:8000/docs
 ```
 
 ---
@@ -274,6 +325,9 @@ class CompositionScore:
 | 主体检测 | YOLOv8 | 快速、准确、易部署 |
 | 图像处理 | OpenCV | 成熟稳定 |
 | AI 扩图 | Stable Diffusion | 效果最好 |
+| Windows UI | CustomTkinter | 简单、现代 |
+| macOS UI | PySide6 | Qt、原生体验 |
+| 移动端 | Flutter | 跨平台、高性能 |
 | Web UI | Gradio | 快速原型 |
 | API | FastAPI | 高性能、异步 |
 | 部署 | Docker | 标准化 |

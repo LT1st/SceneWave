@@ -1,0 +1,55 @@
+name: sceneweave_mobile
+description: SceneWeave - AI 智能图片重构图工具移动应用
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # UI
+  cupertino_icons: ^1.0.6
+
+  # 状态管理
+  get: ^4.6.6
+
+  # 网络请求
+  dio: ^5.4.0
+
+  # 图片选择
+  image_picker: ^1.0.5
+
+  # 路径管理
+  path_provider: ^2.1.1
+
+  # 图片缓存
+  cached_network_image: ^3.3.0
+
+  # 权限管理
+  permission_handler: ^11.1.0
+
+  # 文件选择
+  file_picker: ^6.1.1
+
+  # 图片保存
+  image_gallery_saver: ^2.0.3
+
+  # 工具
+  intl: ^0.18.1
+  logger: ^2.0.2+1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/icons/
