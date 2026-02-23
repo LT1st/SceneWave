@@ -162,6 +162,18 @@ python web/app.py
 # 打开 http://localhost:7860
 ```
 
+### 桌面应用 (Windows)
+
+**方式一：双击启动**
+```
+双击 start.bat
+```
+
+**方式二：命令行启动**
+```bash
+python app/main.py
+```
+
 ---
 
 ## API 设计 (规划)
