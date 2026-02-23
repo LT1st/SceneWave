@@ -1,0 +1,51 @@
+# SceneWeave 默认配置
+
+environment: production
+debug: false
+
+# 模型配置
+model:
+  yolo_model_size: n  # n, s, m, l, x
+  yolo_confidence: 0.25
+  yolo_iou: 0.45
+  device: cpu  # cpu, cuda, mps
+
+# 评分配置
+score:
+  rule_of_thirds_weight: 30.0
+  visual_balance_weight: 25.0
+  subject_prominence_weight: 25.0
+  breathing_room_weight: 20.0
+
+  grade_s_threshold: 90.0
+  grade_a_threshold: 80.0
+  grade_b_threshold: 70.0
+  grade_c_threshold: 60.0
+
+# 重构图配置
+reframe:
+  default_padding: blur
+  default_padding_color: [255, 255, 255]
+  min_output_size: 480
+  max_output_size: 2160
+
+# API 配置
+api:
+  host: 0.0.0.0
+  port: 8000
+  reload: false
+  log_level: info
+  allow_origins: ["*"]
+  allow_credentials: true
+  allow_methods: ["*"]
+  allow_headers: ["*"]
+  max_upload_size: 10485760  # 10MB
+
+# 日志配置
+log:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file_enabled: false
+  file_path: logs/sceneweave.log
+  max_bytes: 10485760  # 10MB
+  backup_count: 5

@@ -225,6 +225,80 @@ python api/main.py
 # http://localhost:8000/docs
 ```
 
+### Docker 部署
+
+```bash
+# 构建镜像
+docker build -t sceneweave .
+
+# 运行服务
+docker-compose up -d
+
+# 访问 API
+# http://localhost:8000
+```
+
+---
+
+## 开发
+
+### 运行测试
+
+```bash
+# 运行所有测试
+pytest tests/
+
+# 带覆盖率报告
+pytest tests/ --cov=src --cov-report=html
+```
+
+### 代码检查
+
+```bash
+# 格式化代码
+black src/ tests/
+
+# 代码检查
+ruff check src/ tests/
+
+# 类型检查
+mypy src/
+```
+
+### 配置
+
+配置文件位于 `config/` 目录：
+
+- `default.yaml` - 默认配置
+- `development.yaml` - 开发环境
+
+通过环境变量切换：
+
+```bash
+export SCENEWEAVE_ENV=development
+python api/main.py
+```
+
+---
+
+## 文档
+
+- [API 文档](docs/API.md) - REST API 详细说明
+- [架构文档](docs/ARCHITECTURE.md) - 系统架构和设计
+- [贡献指南](CONTRIBUTING.md) - 如何贡献代码
+
+---
+
+## CI/CD
+
+项目使用 GitHub Actions 进行自动化：
+
+- **测试** - 每次提交自动运行测试
+- **Lint** - 代码风格检查
+- **覆盖率** - 自动生成覆盖率报告
+
+状态：[![Tests](https://github.com/LT1st/SceneWave/workflows/Tests/badge.svg)](https://github.com/LT1st/SceneWave/actions)
+
 ---
 
 ## API 设计 (规划)
