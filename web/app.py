@@ -11,7 +11,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import gradio as gr
 import numpy as np
 
-from src.core import SubjectDetector, CompositionScorer, Reframer
+from src.core import (
+    SubjectDetector,
+    CompositionScorer,
+    Reframer,
+    AIOutpainter,
+    TraditionalOutpainter,
+    OutpaintDirection
+)
 from src.core.reframer import PaddingStrategy
 
 
@@ -19,6 +26,16 @@ from src.core.reframer import PaddingStrategy
 detector = None
 reframer = Reframer()
 scorer = CompositionScorer()
+ai_outpainter = None
+traditional_outpainter = TraditionalOutpainter()
+
+
+def get_ai_outpainter():
+    """延迟加载 AI 扩图器"""
+    global ai_outpainter
+    if ai_outpainter is None:
+        ai_outpainter = AIOutpainter(device="cpu")
+    return ai_outpainter
 
 
 def get_detector():
@@ -166,6 +183,62 @@ def reframe_image(image, ratio, padding):
     return result.image, comparison, all_results, f"尺寸: {result.original_size} -> {result.new_size}"
 
 
+def outpaint_image(image, direction, expand_pixels, prompt, use_ai):
+    """AI 扩图"""
+    if image is None:
+        return None, "请先上传图片"
+
+    # 保存临时文件
+    temp_path = "/tmp/sceneweave_input.jpg"
+    import cv2
+    cv2.imwrite(temp_path, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+
+    # 解析方向
+    direction_map = {
+        "向左扩展": OutpaintDirection.LEFT,
+        "向右扩展": OutpaintDirection.RIGHT,
+        "向上扩展": OutpaintDirection.TOP,
+        "向下扩展": OutpaintDirection.BOTTOM,
+        "四周扩展": OutpaintDirection.ALL,
+    }
+    direction_enum = direction_map[direction]
+
+    try:
+        if use_ai:
+            # 使用 AI 扩图
+            outpainter = get_ai_outpainter()
+            result = outpainter.outpaint(
+                temp_path,
+                direction=direction_enum,
+                expand_pixels=expand_pixels,
+                prompt=prompt or "high quality, detailed, natural extension",
+                num_inference_steps=30,  # 减少步数加快速度
+                guidance_scale=7.5
+            )
+            info = f"AI 扩图完成 | 耗时: {result.generation_time:.2f}s | 尺寸: {result.original_size} -> {result.new_size}"
+        else:
+            # 使用传统方法
+            outpainter = traditional_outpainter
+            result_image = outpainter.extend(image, direction_enum, expand_pixels)
+
+            from src.core.outpainter import OutpaintResult
+            result = OutpaintResult(
+                image=result_image,
+                original_size=(image.shape[1], image.shape[0]),
+                new_size=(result_image.shape[1], result_image.shape[0]),
+                direction=direction_enum,
+                expand_pixels=expand_pixels,
+                mask=None,
+                generation_time=0
+            )
+            info = f"传统扩图完成 | 尺寸: {result.original_size} -> {result.new_size}"
+
+        return result.image, info
+
+    except Exception as e:
+        return None, f"扩图失败: {str(e)}"
+
+
 # 创建 Gradio 界面
 with gr.Blocks(
     title="SceneWeave - AI 智能重构图",
@@ -174,7 +247,7 @@ with gr.Blocks(
 
     gr.Markdown("""
     # SceneWeave - AI 智能图片重构图工具
-    让每一张照片都成为完美构图
+    让每一张照片都成为完美构图 | 支持 AI 智能扩图
     """)
 
     with gr.Tabs():
@@ -260,6 +333,54 @@ with gr.Blocks(
                 reframe_image,
                 inputs=[batch_input, gr.State("4:5 竖图 (Instagram/小红书)"), batch_padding],
                 outputs=[gr.State(), gr.State(), batch_gallery, gr.State()]
+            )
+
+        # Tab 4: AI 扩图
+        with gr.Tab("AI 扩图"):
+            gr.Markdown("""
+            ### 🤖 AI 智能扩图
+            使用 Stable Diffusion 进行智能图片扩展
+            """)
+
+            with gr.Row():
+                with gr.Column():
+                    outpaint_input = gr.Image(label="上传图片")
+                    direction_select = gr.Dropdown(
+                        choices=[
+                            "向左扩展",
+                            "向右扩展",
+                            "向上扩展",
+                            "向下扩展",
+                            "四周扩展",
+                        ],
+                        value="四周扩展",
+                        label="扩展方向"
+                    )
+                    expand_pixels = gr.Slider(
+                        minimum=64,
+                        maximum=512,
+                        value=256,
+                        step=64,
+                        label="扩展像素数"
+                    )
+                    prompt_input = gr.Textbox(
+                        label="提示词 (可选)",
+                        placeholder="描述你想要扩展的内容，留空则自动生成"
+                    )
+                    use_ai = gr.Checkbox(
+                        label="使用 AI 扩图 (取消则使用传统方法)",
+                        value=True
+                    )
+                    outpaint_btn = gr.Button("开始扩图", variant="primary")
+
+                with gr.Column():
+                    outpaint_output = gr.Image(label="扩图结果")
+                    outpaint_info = gr.Text(label="处理信息")
+
+            outpaint_btn.click(
+                outpaint_image,
+                inputs=[outpaint_input, direction_select, expand_pixels, prompt_input, use_ai],
+                outputs=[outpaint_output, outpaint_info]
             )
 
     gr.Markdown("""

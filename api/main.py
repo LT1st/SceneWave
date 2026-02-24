@@ -19,7 +19,15 @@ import os
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.core import SubjectDetector, CompositionScorer, Reframer
+from src.core import (
+    SubjectDetector,
+    CompositionScorer,
+    Reframer,
+    AIOutpainter,
+    TraditionalOutpainter,
+    OutpaintDirection,
+    InpaintMode
+)
 from src.core.reframer import PaddingStrategy
 
 
@@ -91,14 +99,58 @@ class HealthResponse(BaseModel):
     version: str
 
 
+class OutpaintRequest(BaseModel):
+    """AI 扩图请求"""
+    direction: Literal["left", "right", "top", "bottom", "all"] = "all"
+    expand_pixels: int = Field(description="扩展像素数", ge=64, le=1024)
+    prompt: str = Field(default="", description="提示词")
+    negative_prompt: str = Field(default="blurry, low quality", description="负面提示词")
+    use_ai: bool = Field(default=True, description="是否使用 AI 扩图")
+    num_inference_steps: int = Field(default=50, description="AI 推理步数")
+    guidance_scale: float = Field(default=7.5, description="引导系数")
+    seed: Optional[int] = Field(default=None, description="随机种子")
+
+
+class OutpaintResponse(BaseModel):
+    """AI 扩图响应"""
+    success: bool
+    original_size: List[int]
+    new_size: List[int]
+    direction: str
+    expand_pixels: int
+    use_ai: bool
+    generation_time: float
+    image_base64: str
+
+
+class InpaintRequest(BaseModel):
+    """AI 修复请求"""
+    mask_bbox: Optional[List[int]] = Field(default=None, description="修复区域 [x1, y1, x2, y2]")
+    prompt: str = Field(default="", description="提示词")
+    negative_prompt: str = Field(default="blurry, low quality", description="负面提示词")
+    mode: Literal["object_removal", "object_replace", "background_fill", "extend"] = "background_fill"
+    num_inference_steps: int = Field(default=50, description="AI 推理步数")
+    guidance_scale: float = Field(default=7.5, description="引导系数")
+    seed: Optional[int] = Field(default=None, description="随机种子")
+
+
+class InpaintResponse(BaseModel):
+    """AI 修复响应"""
+    success: bool
+    original_size: List[int]
+    mode: str
+    generation_time: float
+    image_base64: str
+
+
 # ============================================================================
 # FastAPI 应用
 # ============================================================================
 
 app = FastAPI(
     title="SceneWeave API",
-    description="AI 智能图片重构图 API",
-    version="1.0.0"
+    description="AI 智能图片重构图 API - 支持构图分析、智能重构图、AI 扩图",
+    version="2.0.0"
 )
 
 # CORS 配置
@@ -116,11 +168,18 @@ class GlobalState:
         self.detector: Optional[SubjectDetector] = None
         self.reframer = Reframer()
         self.scorer = CompositionScorer()
+        self.ai_outpainter: Optional[AIOutpainter] = None
+        self.traditional_outpainter = TraditionalOutpainter()
 
     def get_detector(self) -> SubjectDetector:
         if self.detector is None:
             self.detector = SubjectDetector(model_size="n")
         return self.detector
+
+    def get_ai_outpainter(self) -> AIOutpainter:
+        if self.ai_outpainter is None:
+            self.ai_outpainter = AIOutpainter(device="cpu")
+        return self.ai_outpainter
 
 state = GlobalState()
 
@@ -406,6 +465,199 @@ async def batch_reframe(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"批量重构图失败: {str(e)}")
+
+
+@app.post("/api/v1/outpaint", response_model=OutpaintResponse)
+async def outpaint_image(
+    file: UploadFile = File(...),
+    direction: str = "all",
+    expand_pixels: int = 256,
+    prompt: str = "",
+    negative_prompt: str = "blurry, low quality",
+    use_ai: bool = True,
+    num_inference_steps: int = 50,
+    guidance_scale: float = 7.5,
+    seed: Optional[int] = None
+):
+    """
+    AI 扩图 - 智能扩展图片
+
+    - direction: 扩展方向 (left, right, top, bottom, all)
+    - expand_pixels: 扩展像素数 (64-1024)
+    - prompt: 提示词
+    - use_ai: 是否使用 AI (True=Stable Diffusion, False=传统方法)
+    - num_inference_steps: AI 推理步数
+    - guidance_scale: 引导系数
+    - seed: 随机种子
+    """
+    # 验证文件类型
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="只支持图片文件")
+
+    # 验证参数
+    valid_directions = ["left", "right", "top", "bottom", "all"]
+    if direction not in valid_directions:
+        raise HTTPException(status_code=400, detail=f"方向必须是: {', '.join(valid_directions)}")
+
+    if expand_pixels < 64 or expand_pixels > 1024:
+        raise HTTPException(status_code=400, detail="扩展像素数必须在 64-1024 之间")
+
+    try:
+        # 读取图片
+        image_bytes = await file.read()
+        image = decode_image(image_bytes)
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        # 保存临时文件
+        temp_path = save_temp_image(image_rgb)
+
+        # 执行扩图
+        direction_enum = OutpaintDirection(direction)
+
+        if use_ai:
+            # 使用 AI 扩图
+            outpainter = state.get_ai_outpainter()
+            result = outpainter.outpaint(
+                temp_path,
+                direction=direction_enum,
+                expand_pixels=expand_pixels,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+                seed=seed
+            )
+        else:
+            # 使用传统方法
+            outpainter = state.traditional_outpainter
+            result_image = outpainter.extend(image_rgb, direction_enum, expand_pixels)
+
+            from src.core.outpainter import OutpaintResult
+            result = OutpaintResult(
+                image=result_image,
+                original_size=(image_rgb.shape[1], image_rgb.shape[0]),
+                new_size=(result_image.shape[1], result_image.shape[0]),
+                direction=direction_enum,
+                expand_pixels=expand_pixels,
+                mask=None,
+                generation_time=0
+            )
+
+        # 转换为 base64
+        image_base64 = image_to_base64(result.image)
+
+        # 清理临时文件
+        try:
+            os.remove(temp_path)
+        except:
+            pass
+
+        return OutpaintResponse(
+            success=True,
+            original_size=list(result.original_size),
+            new_size=list(result.new_size),
+            direction=direction,
+            expand_pixels=result.expand_pixels,
+            use_ai=use_ai,
+            generation_time=result.generation_time,
+            image_base64=image_base64
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI 扩图失败: {str(e)}")
+
+
+@app.post("/api/v1/inpaint", response_model=InpaintResponse)
+async def inpaint_image(
+    file: UploadFile = File(...),
+    mask_file: Optional[UploadFile] = None,
+    mask_bbox: Optional[str] = None,  # JSON: [x1, y1, x2, y2]
+    prompt: str = "",
+    negative_prompt: str = "blurry, low quality",
+    mode: str = "background_fill",
+    num_inference_steps: int = 50,
+    guidance_scale: float = 7.5,
+    seed: Optional[int] = None
+):
+    """
+    AI 修复 - 修复/替换图片区域
+
+    - mask_file: mask 图片文件 (白色区域为需要修复的区域)
+    - mask_bbox: 修复区域边界框 JSON: [x1, y1, x2, y2]
+    - prompt: 提示词
+    - mode: 修复模式 (object_removal, object_replace, background_fill, extend)
+    - num_inference_steps: AI 推理步数
+    - guidance_scale: 引导系数
+    - seed: 随机种子
+    """
+    # 验证文件类型
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="只支持图片文件")
+
+    # 必须提供 mask_file 或 mask_bbox
+    if mask_file is None and mask_bbox is None:
+        raise HTTPException(status_code=400, detail="必须提供 mask_file 或 mask_bbox")
+
+    try:
+        import json
+
+        # 读取图片
+        image_bytes = await file.read()
+        image = decode_image(image_bytes)
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        # 保存临时文件
+        temp_path = save_temp_image(image_rgb)
+
+        # 处理 mask
+        mask_path = None
+        mask_bbox_tuple = None
+
+        if mask_file:
+            mask_bytes = await mask_file.read()
+            mask = decode_image(mask_bytes)
+            mask_path = save_temp_image(cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY))
+
+        if mask_bbox:
+            mask_bbox_tuple = tuple(int(x) for x in json.loads(mask_bbox))
+
+        # 执行修复
+        outpainter = state.get_ai_outpainter()
+        mode_enum = InpaintMode(mode)
+
+        result = outpainter.inpaint(
+            temp_path,
+            mask_path=mask_path,
+            mask_bbox=mask_bbox_tuple,
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            mode=mode_enum,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            seed=seed
+        )
+
+        # 转换为 base64
+        image_base64 = image_to_base64(result.image)
+
+        # 清理临时文件
+        try:
+            os.remove(temp_path)
+            if mask_path:
+                os.remove(mask_path)
+        except:
+            pass
+
+        return InpaintResponse(
+            success=True,
+            original_size=list(result.original_size),
+            mode=mode,
+            generation_time=result.generation_time,
+            image_base64=image_base64
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI 修复失败: {str(e)}")
 
 
 # ============================================================================
